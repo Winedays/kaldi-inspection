@@ -8,11 +8,12 @@
     <meta name="description" content="">
     <meta name="author" content="">
     <title> List </title>
-    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <link href="/static/css/bootstrap-custom.css" rel="stylesheet">
     <link href="/static/css/style.css" rel="stylesheet">
     <link href="/static/css/all.css" rel="stylesheet">
     <link href="/static/css/list.css" rel="stylesheet">
+    <link href="/static/css/icono.min.css" rel="stylesheet">
 
 </head>
 
@@ -38,8 +39,20 @@
                 <div>
                     <label for="criterion"> criterion: </label>
                     <select id="er-options" name="criterion">
-                        <option value="wer">wer</option>
                         <option value="cer">cer</option>
+                        <option value="wer">wer</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="quantity">quantity: </label>
+                    <select id="quantity" name="quantity">
+                        <option value="all">all</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                        <option value="2500">2500</option>
+                        <option value="5000">5000</option>
+                        <option value="10000">10000</option>
                     </select>
                 </div>
                 <input type="submit" value="submit" name="submit" />
@@ -50,12 +63,12 @@
         <div id=listWrapper></div>
     </main>
 
-    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/1.4.0/wavesurfer.min.js"></script>
+    <script src="/static/js/jquery-3.2.1.min.js"></script>
+    <script src="/static/js/popper.min.js"></script>
+    <script src="/static/js/bootstrap.min.js"></script>
+    <script src="/static/js/wavesurfer.min.js"></script>
     <script src="/static/js/utility.js"></script>
-    <script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+    <script src="/static/js/recorder.js"></script>
     <script src="/static/js/recorder_gui.js"></script>
     <script src="/static/js/jsonViewer.js"></script>
     <script src="/static/js/list.js"></script>

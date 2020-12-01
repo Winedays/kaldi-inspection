@@ -1,3 +1,11 @@
+form#list-fetch-form > div {
+  margin: 5px 0;
+}
+
+form#list-fetch-form > div > label {
+  min-width: 120px;
+}
+
 #listWrapper {
   width: 100%;
 }
@@ -9,4 +17,29 @@
 
 .list-item {
   padding-bottom:  30px;
+}
+
+.correct {
+  /* color: green; */
+}
+
+.insert {
+  color: blue;
+}
+
+.delete {
+  /* text-decoration: line-through; */
+  color: darkviolet;
+}
+
+.substitution {
+  color: red;
+}
+
+.audio {
+  cursor: pointer;
+}
+
+.audio:hover {
+  transform: scale(1.1);
 }

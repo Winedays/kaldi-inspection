@@ -1,12 +1,13 @@
 class AudioScoreDrawer {
   //constructor(targetId, audioData, data, waveColors, scoreColors, interactionId){
-  constructor(id, audioData, data, waveColors, scoreColors) {
+  constructor(id, audioData, data, audioSegments, waveColors, scoreColors) {
     this.id = id;
     //this.targetId= targetId;
     this.audioData = audioData;
     this.data = data;
     this.waveColors = waveColors;
     this.scoreColors = scoreColors;
+    this.segments = audioSegments;
     //this.interactionId = interactionId;
 
     this.dataUrl = null;
@@ -15,26 +16,30 @@ class AudioScoreDrawer {
     // Setting
     this.silenceColor = "#FFFFFF";
     // top, right, bottom, left
-    this.paddings = [30, 20, 20, 20];
+    this.paddings = [50, 20, 50, 20];
     this.scorePhoneBlockLineWidth = 1;
     this.clickedRegionLineWidth = 8;
-    this.clickedRegionColor = "#0A1747";
+    this.clickedRegionColor = "#46ECC8";
+    // canvas overflow limit
+    this.overflowPoint = 10 ;
 
     // Create canvas for drawing and intersection
     this.idSel = $(`#${this.id}`);
     this.idSel.addClass("audioScoreDrawer");
-    this.idSel.append("<div class=\"audioScoreDrawer_utt\"> <h4 id=\"uttid\">uttid</h4> </div>");
-    this.idSel.append("<div class=\"audioScoreDrawer_title\"> <p id=\"text\">text</p> </div>");
-    this.idSel.append("<audio controls><source src=" + audioData + "></audio>");
-    this.idSel.append("<canvas class=\"audioScoreDrawer_result\"></canvas>");
-    this.idSel.append("<canvas class=\"audioScoreDrawer_clickedResult\"></canvas>");
+    let drawerHTML = "<div class=\"audioScoreDrawer_utt\"> <h4 id=\"uttid\">" + this.data.Utterance + "</h4> </div>" ;
+    drawerHTML += "<div class=\"audioScoreDrawer_title\"> <p id=\"text\">ref: " + this.data.text + "</p> </div>" ;
+    drawerHTML += makeAudioPlayerHtml(this.data.Utterance) ;
+    drawerHTML += "<div class=\"canvas_area\"> <canvas class=\"audioScoreDrawer_result\"></canvas> <canvas class=\"audioScoreDrawer_clickedResult\"></canvas> </div>" ;
+    this.idSel.append( drawerHTML ) ;
 
+    this.canvas_area = this.idSel.find(".canvas_area");
     this.targetSel = this.idSel.find("canvas").eq(0)[0];
     this.ctx = this.targetSel.getContext("2d");
     this.interactionSel = this.idSel.find("canvas").eq(1)[0];
     this.ctxInteraction = this.interactionSel.getContext("2d");
 
-    // Player
+    // canvas player
+    window.AudioContext = window.AudioContext || window.webkitAudioContext;
     this.audioCtx = new AudioContext();
 
     // Interaction
@@ -52,8 +57,6 @@ class AudioScoreDrawer {
       this.data = this.getDataFromUrl(this.dataUrl);
     }
     this.scoreData = this.getScoreData(this.data);
-    this.idSel.find("h4")[0].innerHTML = this.data.Utterance;
-    this.idSel.find("p")[0].innerHTML = "ref: " + this.data.text;
 
     // Get audio data
     // Support URL
@@ -91,7 +94,73 @@ class AudioScoreDrawer {
       });
     });
 
+    // audio player
+    let waveBlob = bufferToWave( this.audioData ) ;
+    let waveUrl = URL.createObjectURL( waveBlob ) ;
+    this.audioPlayer = new AudioPlayer( waveUrl );
+
     // Add click event
+    this.clickEvent();
+
+    this.draw();
+    $(window).resize(() => {
+      // only resize with non-overflow canvas
+      if( this.duration <= this.overflowPoint ){
+        this.draw();
+      }
+    });
+  }
+
+  setInfo() {
+    this.height = this.targetSel.scrollHeight;
+    this.width = this.targetSel.scrollWidth;
+    if( this.duration > this.overflowPoint ){
+        // let canvas overflow if audio is too long
+        this.width = 2000; // 2000px
+        this.targetSel.setAttribute("style","width: 2000px");
+        this.interactionSel.setAttribute("style","width: 2000px");
+    }
+    this.scoreBlkLength = this.height - this.paddings[0] - this.paddings[2];
+
+    this.waveBaseX = this.paddings[3];
+    this.waveMidY = this.paddings[0] + (this.scoreBlkLength) / 2;
+    this.waveSecTextBaseY = this.height - this.paddings[2] * 2 / 3;
+
+    this.scoreBaseX = this.paddings[3];
+    this.scoreBaseY = this.paddings[0];
+    this.scoreWordNameBaseY = this.paddings[0] * 2 / 3;
+    this.scoreWordScoreBaseY = this.paddings[0] * 3 / 4;
+    this.scorePhoneNameBaseY = this.scoreBaseY + this.scoreBlkLength - this.paddings[0] * 1 / 4;
+    this.scorePhoneScoreBaseY = this.scoreBaseY + this.scoreBlkLength - this.paddings[0] * 3 / 4;
+
+    this.frameBaseX = this.waveBaseX;
+    this.frameBaseY = this.scoreBaseY - 1;
+    this.frameWidth = this.width - this.paddings[1] - this.paddings[3] + 2;
+    this.frameHeight = this.scoreBlkLength + 2;
+
+    this.xUnitLength = this.frameWidth / this.sampleAmount;
+    this.yUnitLength = this.scoreBlkLength / 2 / this.waveMaxAbsValue;
+
+    // Need set width and height of canvas for unit of pixel
+    this.targetSel.setAttribute("width", this.width);
+    this.targetSel.setAttribute("height", this.height);
+    this.interactionSel.setAttribute("width", this.width);
+    this.interactionSel.setAttribute("height", this.height);
+
+    // Regions for being clicked
+    // [{'x1': <x>, 'y1': <y>, 'x2': <x>, 'y2': <y>}]
+    this.clickRegions = [];
+    this.phonesInternal.forEach((interval, idx) => {
+      this.clickRegions.push({
+        x1: this.scoreBaseX + interval[0] * this.sampleRate * this.xUnitLength,
+        y1: this.scoreBaseY,
+        x2: this.scoreBaseX + interval[1] * this.sampleRate * this.xUnitLength,
+        y2: this.scoreBaseY + this.frameHeight
+      });
+    });
+  }
+  
+  clickEvent() {
     this.clickRegions = null;
     let interaction = {
       start: {
@@ -104,7 +173,10 @@ class AudioScoreDrawer {
       },
       isDrag: false
     };
-
+    // for scrollbar
+    let scrollX = 0 ;
+    let clickedPosX = 0 ;
+    
     if (!this.isInteractionEventSet) {
 
       this.interactionSel.addEventListener("mousedown", e => {
@@ -114,15 +186,16 @@ class AudioScoreDrawer {
 
         interaction.start.x = e.clientX - this.canvasInteractionPos.x;
         interaction.start.y = e.clientY - this.canvasInteractionPos.y;
-
+        
       });
       this.interactionSel.addEventListener("mousemove", e => {
         this.canvasInteractionPos = this.interactionSel.getBoundingClientRect();
-
+        
         interaction.end.x = e.clientX - this.canvasInteractionPos.x;
         interaction.end.y = e.clientY - this.canvasInteractionPos.y;
 
         if (interaction.isDrag) {
+          // canvas click event
           let resionStart = null, regionEnd = null;
           let start = {
             pos: interaction.start,
@@ -164,6 +237,25 @@ class AudioScoreDrawer {
             'y2': start.region.y2
           }
           this.drawClickedRegion();
+          
+          // scroll move event
+          
+          if( this.duration > this.overflowPoint ) {
+            let divWidth = this.canvas_area.outerWidth(true) ;  // the mousemove available area
+            // let scrollWidth = this.canvas_area[0].scrollWidth ;  // the scroll bar length
+            // let wDiff = (scrollWidth / divWidth) - 1 ; // widths difference ratio
+            let posX = e.pageX - this.canvas_area.offset().left ; // mouse relative position at the screen
+            
+            if( posX > divWidth * 4/5 ){
+              let edgeX = this.idSel.width() * 4 / 5 ;
+              let moveX = e.offsetX - edgeX ;
+              this.canvas_area.scrollLeft( moveX ) ;
+            } else if( posX < divWidth * 1/5 ) {
+              let edgeX = this.idSel.width() * 1 / 5 ;
+              let moveX = e.offsetX - edgeX ;
+              this.canvas_area.scrollLeft( moveX ) ;
+            } 
+          }
         }
       });
       this.interactionSel.addEventListener("mouseup", e => {
@@ -190,13 +282,15 @@ class AudioScoreDrawer {
             if (region.x1 <= start.pos.x && start.pos.x <= region.x2 && region.y1 <= start.pos.y &&
               start.pos.y <= region.y2) {
               start.region = region;
-              start.interval = this.phonesInternal[idx];
+              start.interval = [ ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][0]) ).toFixed(3) ,
+                                 ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][1]) ).toFixed(3) ];
             }
 
             if (region.x1 <= end.pos.x && end.pos.x <= region.x2 && region.y1 <= end.pos.y &&
               end.pos.y <= region.y2) {
               end.region = region;
-              end.interval = this.phonesInternal[idx];
+              end.interval = [ ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][0]) ).toFixed(3) ,
+                                 ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][1]) ).toFixed(3) ];
             }
 
             if (start.region !== null && end.region !== null) {
@@ -235,7 +329,8 @@ class AudioScoreDrawer {
               this.clickedRegion = region;
               this.drawClickedRegion();
 
-              let interval = this.phonesInternal[idx];
+              let interval = [ ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][0]) ).toFixed(3) ,
+                                 ( parseFloat(this.beginTime) + parseFloat(this.phonesInternal[idx][1]) ).toFixed(3) ];
               this.play(interval[0], interval[1]);
               return false;
             }
@@ -245,54 +340,6 @@ class AudioScoreDrawer {
       });
       this.isInteractionEventSet = true;
     }
-
-    this.draw();
-    $(window).resize(() => {
-      this.draw();
-    });
-  }
-
-  setInfo() {
-    this.height = this.targetSel.scrollHeight;
-    this.width = this.targetSel.scrollWidth;
-    this.scoreBlkLength = this.height - this.paddings[0] - this.paddings[2];
-
-    this.waveBaseX = this.paddings[3];
-    this.waveMidY = this.paddings[0] + (this.scoreBlkLength) / 2;
-    this.waveSecTextBaseY = this.height - this.paddings[2] / 4;
-
-    this.scoreBaseX = this.paddings[3];
-    this.scoreBaseY = this.paddings[0];
-    this.scoreWordNameBaseY = this.paddings[0] * 1 / 4;
-    this.scoreWordScoreBaseY = this.paddings[0] * 3 / 4;
-    this.scorePhoneNameBaseY = this.scoreBaseY + this.scoreBlkLength - this.paddings[0] * 1 / 4;
-    this.scorePhoneScoreBaseY = this.scoreBaseY + this.scoreBlkLength - this.paddings[0] * 3 / 4;
-
-    this.frameBaseX = this.waveBaseX;
-    this.frameBaseY = this.scoreBaseY - 1;
-    this.frameWidth = this.width - this.paddings[1] - this.paddings[3] + 2;
-    this.frameHeight = this.scoreBlkLength + 2;
-
-    this.xUnitLength = this.frameWidth / this.sampleAmount;
-    this.yUnitLength = this.scoreBlkLength / 2 / this.waveMaxAbsValue;
-
-    // Need set width and height of canvas for unit of pixel
-    this.targetSel.setAttribute("width", this.width);
-    this.targetSel.setAttribute("height", this.height);
-    this.interactionSel.setAttribute("width", this.width);
-    this.interactionSel.setAttribute("height", this.height);
-
-    // Regions for being clicked
-    // [{'x1': <x>, 'y1': <y>, 'x2': <x>, 'y2': <y>}]
-    this.clickRegions = [];
-    this.phonesInternal.forEach((interval, idx) => {
-      this.clickRegions.push({
-        x1: this.scoreBaseX + interval[0] * this.sampleRate * this.xUnitLength,
-        y1: this.scoreBaseY,
-        x2: this.scoreBaseX + interval[1] * this.sampleRate * this.xUnitLength,
-        y2: this.scoreBaseY + this.frameHeight
-      });
-    });
   }
 
   draw() {
@@ -386,7 +433,8 @@ class AudioScoreDrawer {
     this.ctx.restore();
 
     // Label time
-    for (let sec = 1; sec < this.duration; sec++) {
+    this.ctx.font = "14px sans-serif";
+    for (let sec = 0; sec < this.duration; sec++) {
       let textWidth = this.ctx.measureText(sec).width;
       let x = this.waveBaseX + sec * this.sampleRate * this.xUnitLength - textWidth / 2;
       this.ctx.fillText(sec, x, this.waveSecTextBaseY);
@@ -423,6 +471,7 @@ class AudioScoreDrawer {
       // Name of word
       text = `${word.text}`
       // (${word.name})`;
+      this.ctx.font = "14px sans-serif";
       textWidth = this.ctx.measureText(text).width;
       textX = blkX + blkWidth / 2 - textWidth / 2;
       this.ctx.fillText(text, textX, this.scoreWordNameBaseY);
@@ -486,6 +535,7 @@ class AudioScoreDrawer {
   }
 
   play(start, end) {
+    console.log( "play between " + start + " and " + end + "." );
     let audioSource = this.audioCtx.createBufferSource();
     audioSource.buffer = this.audioData;
     audioSource.connect(this.audioCtx.destination);
@@ -563,16 +613,74 @@ class AudioScoreDrawer {
 
     let audioCtx = new AudioContext();
     audioCtx.decodeAudioData(data, audioData => {
-      this.audioData = audioData;
-      callback();
+      this.audioBufferSlice(audioData, callback);
+      // this.audioData = audioData;
+      // callback();
     }, error => {
       console.log(`Error with decoding audio data ${error.err}`);
     });
   }
 
-  setData(audioData, data) {
+  audioBufferSlice(buffer, callback) {
+    /** ref.: https://miguelmota.com/bytes/slice-audiobuffer/ , https://stackoverflow.com/questions/50191365/how-to-slice-an-audio-blob-at-a-specific-time **/
+    let error = null;
+
+    let duration = buffer.duration;
+    let channels = buffer.numberOfChannels;
+    let sampleRate = buffer.sampleRate;
+
+    // slice by segments
+    if( this.segments != null ){
+      let beginTime = parseFloat(this.segments[0]).toFixed(3);
+      let endTime = parseFloat(this.segments[1]).toFixed(3);
+
+      if (beginTime < 0) {
+        error = new RangeError('begin time must be greater than 0');
+      }
+      if (endTime > duration) {
+        error = new RangeError('end time must be less than or equal to ' + duration);
+      }
+      if (typeof callback !== 'function') {
+        error = new TypeError('callback must be a function');
+      }
+
+      let startOffset = sampleRate * beginTime;
+      let endOffset = sampleRate * endTime;
+      let frameCount = endOffset - startOffset;
+      let newArrayBuffer;
+
+      try {
+        let audioCtx = new AudioContext();
+        newArrayBuffer = audioCtx.createBuffer(channels, endOffset - startOffset, sampleRate);
+        let tmpBuffer = new Float32Array(frameCount);
+        let offset = 0;
+
+        for (let channel = 0; channel < channels; channel++) {
+          buffer.copyFromChannel(tmpBuffer, channel, startOffset);
+          newArrayBuffer.copyToChannel(tmpBuffer, channel, offset);
+        }
+      } catch(e) {
+        error = e;
+      }
+      if (error) {
+        console.error(error);
+      } else {
+        buffer = null;
+        this.audioData = newArrayBuffer;
+      }
+    } else {
+      this.audioData = buffer;
+    }
+    this.beginTime = 0;
+    this.endTime = this.audioData.duration;
+    callback();
+  }
+
+  setData(audioData, data, audioSegments) {
     this.audioData = audioData;
     this.data = data;
+    this.segments = audioSegments;
     this.initial();
   }
+
 }

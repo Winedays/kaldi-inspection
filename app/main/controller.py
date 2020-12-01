@@ -31,6 +31,7 @@ def fetchList():
             content=None
         )
     content = kaldi.fetchPerUtt(param)
+    content['criterion_file'] = kaldi.fetchCriterionList(param)
     if not content:
         success = False
         message = "decode id or data does not exist"
@@ -41,6 +42,27 @@ def fetchList():
         success=success,
         message=message,
         content=content
+    )
+
+
+@main.route('/list/audio', methods=['GET'])
+def fetchAudio():
+    param = _validateDetailParam();
+    if type(param) == str :
+        return jsonify( success=False, message="invalid params", content=None )
+
+    audioInfo = kaldi.fetchAudio(param)
+    if not audioInfo:
+        success = False
+        message = "decode id or data does not exist"
+    else:
+        success = True
+        message = ""
+
+    return jsonify(
+        success=success,
+        message=message,
+        content=audioInfo
     )
 
 
@@ -82,5 +104,5 @@ def fetchCtm():
     return jsonify(
         success=True,
         message="",
-        content=kaldi.fetchCtm(param)
+        content=content
     )
